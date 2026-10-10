@@ -40,6 +40,27 @@ def setup_test_db():
 
 
 # --------------------------------------------------------------------------- #
+# 0. Reviewer Experience: Root Redirect to Swagger UI
+# --------------------------------------------------------------------------- #
+def test_root_redirect_to_docs():
+    # Test redirect with follow_redirects=False: returns redirect status and Location /docs
+    res = client.get("/", follow_redirects=False)
+    assert res.status_code in (301, 302, 307, 308)
+    assert res.headers["location"] == "/docs"
+
+    # Test following redirect reaches the OpenAPI docs page with HTTP 200
+    res_followed = client.get("/", follow_redirects=True)
+    assert res_followed.status_code == 200
+
+    # Ensure root is excluded from OpenAPI schema per include_in_schema=False
+    openapi_res = client.get("/openapi.json")
+    assert openapi_res.status_code == 200
+    paths = openapi_res.json().get("paths", {})
+    assert "/" not in paths
+    assert "/health" in paths
+
+
+# --------------------------------------------------------------------------- #
 # 1. Validation Tests: Strict Epoch Millis & Calendar Dates
 # --------------------------------------------------------------------------- #
 def test_strict_epoch_millis_rejections():

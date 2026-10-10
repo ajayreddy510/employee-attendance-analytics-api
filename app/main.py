@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from bson import json_util
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Path, Query, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -808,6 +809,12 @@ class RegularizeRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 # System & Employee Endpoints
 # --------------------------------------------------------------------------- #
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirect root visitors to Swagger UI documentation."""
+    return RedirectResponse(url="/docs", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
 @app.get("/health")
 def health():
     """200 only if MongoDB answers a ping, otherwise 503."""
