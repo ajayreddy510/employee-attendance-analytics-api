@@ -66,7 +66,31 @@ Built for the HROne Software Engineer Trainee technical assignment.
 
 ## Key Files
 * [`app/main.py`](file:///app/main.py): Complete application implementation.
+* [`tests/test_api.py`](file:///tests/test_api.py): Comprehensive automated test suite.
 * [`requirements.txt`](file:///requirements.txt): Python dependencies.
 * [`REVIEW.md`](file:///REVIEW.md): Detailed defect review of the starter codebase.
 * [`DECISIONS.md`](file:///DECISIONS.md): Architectural decisions and indexing rationale.
 * [`openapi.yaml`](file:///openapi.yaml): API contract and business rule specifications.
+* [`render.yaml`](file:///render.yaml): Render Blueprint for automated web service deployment.
+
+---
+
+## Testing
+
+Run the automated test suite using an isolated test database:
+```bash
+python -m pytest tests/test_api.py -v
+```
+
+---
+
+## Deployment (Render)
+
+The project includes a [`render.yaml`](file:///render.yaml) blueprint for one-click deployment:
+
+1. **Build Command:** `pip install -r requirements.txt`
+2. **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+3. **Environment Variables:**
+   * `MONGO_URI`: MongoDB Atlas connection string (configured securely as a secret).
+   * `MONGO_DB`: `attendance_db`
+   * `PYTHON_VERSION`: `3.11.9`

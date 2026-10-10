@@ -773,10 +773,10 @@ def health():
     try:
         client.admin.command("ping")
         return {"status": "ok"}
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"MongoDB unreachable: {str(e)}",
+            detail="MongoDB unreachable",
         )
 
 
