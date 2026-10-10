@@ -658,12 +658,7 @@ def build_department_trend_pipeline(
                                 {"$gt": ["$headcount", 0]},
                             ]
                         },
-                        {
-                            "$round": [
-                                {"$divide": ["$present_count", "$headcount"]},
-                                4,
-                            ]
-                        },
+                        {"$divide": ["$present_count", "$headcount"]},
                         None,
                     ]
                 }
@@ -690,7 +685,7 @@ def build_department_trend_pipeline(
                 "present_count": 1,
                 "late_count": 1,
                 "attendance_rate": 1,
-                "moving_avg_7d": {"$round": ["$moving_avg_7d", 4]},
+                "moving_avg_7d": 1,
             }
         },
     ]
