@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pymongo import MongoClient
 
 # Use isolated test database for automated testing
+os.environ["MONGO_URI"] = os.getenv("TEST_MONGO_URI", "mongodb://localhost:27017")
 os.environ["MONGO_DB"] = "attendance_test_db"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
