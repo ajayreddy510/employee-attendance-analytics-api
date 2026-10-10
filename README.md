@@ -6,7 +6,7 @@
 [![CI Tests](https://github.com/ajayreddy510/hrone-attendance-api/actions/workflows/tests.yml/badge.svg)](https://github.com/ajayreddy510/hrone-attendance-api/actions/workflows/tests.yml)
 [![Assignment](https://img.shields.io/badge/HROne-Trainee%20Assignment-purple)](https://github.com/ajayreddy510/hrone-attendance-api)
 
-A robust, production-grade Employee Attendance & Analytics REST API engineered with Python 3.11+, FastAPI, and MongoDB 6.0+. Developed for the **HROne Software Engineer Trainee** technical assignment, this service implements strict attendance validation, race-safe biometric punch operations, Indian Standard Time (IST) overnight shift management, audit-logged attendance regularizations, and database-native aggregation pipelines for departmental and organizational analytics.
+A robust, reviewer-ready Employee Attendance & Analytics REST API engineered with Python 3.11+, FastAPI, and MongoDB 6.0+. Developed for the **HROne Software Engineer Trainee** technical assignment, this service implements strict attendance validation, race-safe attendance punch-in/out operations, Indian Standard Time (IST) overnight shift management, audit-logged attendance regularizations, and database-native aggregation pipelines for departmental and organizational analytics.
 
 ---
 
@@ -40,7 +40,7 @@ graph TD
 
     subgraph FastAPI_App["Application Layer"]
         FastAPI --> Val["Request Validation & Schema Guard<br/>Strict Epoch Millis & YYYY-MM-DD"]
-        Val --> Rules["Attendance Business Logic<br/>• IST Date & Overnight Shifts (R1)<br/>• 10m Grace Period (R2)<br/>• Overtime & Round Half-Up (R3-R4)<br/>• Atomic Punch-Out Race Guard (R4-R5)"]
+        Val --> Rules["Attendance Business Logic<br/>• IST Date & Overnight Shifts (R1)<br/>• 10m Grace Period (R2)<br/>• Overtime (R3) & Work Hours Half-Up (R4)<br/>• Atomic Punch-Out Race Guard"]
         Rules --> PyMongo["PyMongo Driver<br/>Connection Pooling & Index Management"]
     end
 
@@ -66,13 +66,13 @@ All API endpoints strictly implement the contract defined in [`openapi.yaml`](op
 | `GET` | `/` | Root Redirect (`include_in_schema=False`) | `307 Temporary Redirect` forwarding clients directly to `/docs`. |
 | `GET` | `/health` | Readiness Probe | Returns `200 OK` with `{"status":"ok"}` on successful MongoDB ping; `503` if unreachable. |
 | `POST` | `/employees` | Register Employee | Creates an employee with shift times and calendar `joined_on`. Returns `201 Created` or `409 Conflict` on duplicate `emp_code`. |
-| `GET` | `/employees` | List Employees (`department`, `page`, `page_size`) | Paginated employee list sorted strictly by `emp_code asc`. Filterable by exact department name. |
+| `GET` | `/employees` | List Employees (`department`, `page`, `page_size`) | Paginated employee list sorted strictly by `emp_code asc` (R10: `page >= 1`, max `page_size = 100`). Filterable by exact department name. |
 | `POST` | `/attendance/punch-in` | Record Punch-In (`emp_code`, `punched_at`, `status`) | Calculates attendance date (R1) and late minutes (R2). Returns `201 Created` or `409 Conflict` on duplicate punch-in for the same date. |
 | `POST` | `/attendance/punch-out` | Record Punch-Out (`emp_code`, `punched_at`) | Matches latest open punch-in, calculates work hours (R4), overtime (R3), and half-day status (R5). Returns `200 OK` or `409 Conflict` on concurrent punch-outs. |
-| `GET` | `/attendance` | List Attendance Logs (`emp_code`, `date_from`, `date_to`, `status`, `page`, `page_size`) | Paginated attendance log entries sorted by `date desc, emp_code asc`. Backed by compound index `IXSCAN`. |
+| `GET` | `/attendance` | List Attendance Logs (`emp_code`, `date_from`, `date_to`, `status`, `page`, `page_size`) | Paginated attendance log entries sorted by `date desc, emp_code asc` (R10). Backed by compound index `IXSCAN`. |
 | `PATCH` | `/attendance/{emp_code}/{date}` | Regularize Attendance (`reason`, `regularized_by`, status/punch overrides) | Recomputes derived metrics (work hours, overtime, late arrival) and appends an immutable change diff to `history[]`. |
-| `GET` | `/analytics/employees/{emp_code}/monthly` | Monthly Summary (`month=YYYY-MM`) | Computes working days from `joined_on`, weekdays present, late days, overtime hours, and attendance percentage. |
-| `GET` | `/analytics/departments/summary` | Department Metrics (`month=YYYY-MM`) | Aggregates headcount (including employees with zero attendance logs via `$facet`), present count, and average work hours. |
+| `GET` | `/analytics/employees/{emp_code}/monthly` | Monthly Summary (`month=YYYY-MM`) | Computes working days from `joined_on` (R7), weekdays present, late days, overtime minutes, and attendance percentage. |
+| `GET` | `/analytics/departments/summary` | Department Metrics (`month=YYYY-MM`) | Aggregates headcount (R9; including employees with zero attendance logs via `$lookup` and `$unwind` with `preserveNullAndEmptyArrays`), present count, and average work hours. |
 | `GET` | `/analytics/leaderboard/late` | Late-Comer Leaderboard (`month=YYYY-MM`, `limit`) | Computes competition ranking (`1, 2, 2, 4`) for late arrivals using `$setWindowFields` (`$rank`). |
 | `GET` | `/analytics/departments/{department}/trend` | Department Attendance Trend (`from=YYYY-MM-DD`, `to=YYYY-MM-DD`) | Daily series gap-filled with `$densify` even if zero logs exist. Computes weekend null rates and 7-day trailing moving average. |
 | `GET` | `/admin/explain/{endpoint}` | Explain Plan Inspection (`endpoint`, query parameters) | Returns raw MongoDB `executionStats` demonstrating winning plan stages (`IXSCAN`) and absence of `COLLSCAN`. |
@@ -94,25 +94,31 @@ All API endpoints strictly implement the contract defined in [`openapi.yaml`](op
 * An employee is late only if their punch-in occurs strictly more than 10 minutes past `shift_start` (i.e. $> 600$ seconds).
 * Once late, `late_minutes` is calculated from the scheduled `shift_start`, not from the end of the grace period.
 
-### 4. Overtime & Decimal Work-Hour Rounding (R3, R4)
-* **Overtime Threshold:** Overtime is counted only if punch-out is at least 30 whole minutes past `shift_end`; otherwise, it records `0`.
-* **Half-Up Rounding:** Work hours and analytics rates use exact decimal arithmetic with half-up rounding (`ROUND_HALF_UP`), avoiding banker's ties-to-even bias (`ROUND_HALF_EVEN`) and IEEE 754 floating-point drift.
+### 4. Overtime & Decimal Work-Hour Rounding (R3, R4, R8)
+* **Overtime Threshold (R3):** Overtime (`overtime_minutes`) is counted only if punch-out is at least 30 whole minutes past `shift_end`; otherwise, it records `0`.
+* **Half-Up Rounding (R4, R8):** Work hours and analytics rates use exact decimal arithmetic with half-up rounding (`ROUND_HALF_UP`), avoiding banker's ties-to-even bias (`ROUND_HALF_EVEN`) and IEEE 754 floating-point drift.
 
-### 5. Half-Day Classification (R5)
-* An attendance record is classified as `half_day: True` if total work hours are strictly less than 4.50 hours.
+### 5. Half-Day & Presence Classification (R5, R6)
+* **Half-Day Classification (R5):** An attendance record is classified as `half_day: True` if total work hours are strictly less than 4.50 hours. A half day counts as 0.5 of a present day.
+* **Presence Statuses (R6):** Statuses `PRESENT`, `WFH`, and `ON_DUTY` count as present. `ABSENT` and `LEAVE` do not.
 
 ### 6. Concurrency Safety & Race-Condition Prevention
 * **Duplicate Punch-In Protection:** Enforced by unique compound index `{"emp_code": 1, "date": 1}`. Simultaneous punch-in requests result in exactly one HTTP 201 and HTTP 409 Conflict for all concurrent attempts.
 * **Atomic Punch-Out Guard:** Punch-out uses MongoDB atomic `find_one_and_update({"_id": ..., "punch_out": None}, ...)` to guarantee simultaneous punch-out requests cannot close the same attendance record twice.
 
-### 7. Audit History on Regularization (R6)
-* Manual corrections record an immutable audit history item in `history[]` capturing `at` (epoch ms), `by` (manager ID), `reason`, and a typed before-and-after diff (`{"from": ..., "to": ...}`).
+### 7. Audit History on Regularization
+* Manual corrections (`PATCH /attendance/{emp_code}/{date}`) record an immutable audit history item in `history[]` capturing `at` (epoch ms), `by` (free-text author / manager ID), `reason`, and a typed before-and-after diff (`{"from": ..., "to": ...}`).
 * Works safely on legacy records with missing `history` fields.
 
-### 8. Analytics Aggregation Pipelines (R7–R10)
-* **Zero-Log Headcount Inclusion (R9):** Department summary joins active employee rosters with attendance logs via `$facet` to guarantee employees with zero logs are included in total headcount.
-* **Gap Filling with `$densify` (R10):** Department trends generate complete date ranges inside MongoDB aggregation using `$densify`, maintaining continuous 7-day moving averages even for date ranges with zero attendance logs.
+### 8. Analytics Aggregation Pipelines (R7, R9)
+* **Working Days from Join Date (R7):** Monthly analytics compute working days (Mon–Fri) from `joined_on`. Weekend records contribute to late minutes and overtime minutes, but not to standard weekday working day counts.
+* **Zero-Log Headcount Inclusion (R9):** Department summary originates from active employees (`joined_on <= end_of_month`), performs a `$lookup` into attendance logs, and unwinds with `preserveNullAndEmptyArrays: true`. Grouping by department with `{"$addToSet": "$emp_code"}` guarantees employees with zero attendance logs are accurately included in total headcount.
+* **Continuous Date Series with `$densify`:** Department trends generate complete date ranges inside MongoDB aggregation using `$densify`, maintaining continuous 7-day moving averages even for date ranges with zero attendance logs.
 * **Competition Ranking:** Leaderboards apply standard competition ranking (`1, 2, 2, 4`) via `$setWindowFields` with `$rank`.
+
+### 9. Pagination (R10)
+* List endpoints (`/employees`, `/attendance`) enforce 1-based pagination (`page >= 1`, default `page_size = 20`, max `page_size = 100`).
+* Response metadata reflects total matching records after applying query filters (`department`, `emp_code`, `date_from`, `date_to`, `status`).
 
 ---
 
@@ -181,7 +187,7 @@ python -m pytest tests/test_api.py -v
 ### Design Decisions
 * **Single File Architecture:** In accordance with the assignment kit design, the full service logic is maintained cleanly within [`app/main.py`](app/main.py).
 * **Database-Native Analytics:** Analytics calculations (working days, moving averages, gap densification, rank calculations) are executed entirely inside MongoDB aggregation pipelines rather than loading raw logs into Python memory.
-* **Compound Indexes:** Backed by detailed performance benchmarks and explain-plan verifications documented in [`DECISIONS.md`](DECISIONS.md). All key analytical and listing queries utilize winning plan `IXSCAN` stages.
+* **Compound Indexes & Concurrency Strategy:** Index rationale, concurrency decisions, and scaling considerations are documented in [`DECISIONS.md`](DECISIONS.md). Key analytical and listing queries are verified against winning plan `IXSCAN` stages via explain-plan regression checks in [`tests/test_api.py`](tests/test_api.py).
 * **Security & Authentication Scope:** Authentication and authorization are intentionally excluded to conform directly to the assignment specification. This project is an assignment demonstration and should not be used with real employee data without adding authentication (e.g. JWT/OAuth2) and role-based access control.
 
 ---
@@ -196,7 +202,7 @@ python -m pytest tests/test_api.py -v
 | [`requirements-dev.txt`](requirements-dev.txt) | Development and testing dependencies (`pytest`, `httpx`) |
 | [`DATA_MODEL.md`](DATA_MODEL.md) | Database schemas, document shapes, and indexing requirements |
 | [`openapi.yaml`](openapi.yaml) | Official assignment OpenAPI 3.0 contract specification |
-| [`DECISIONS.md`](DECISIONS.md) | Architectural rationale, index strategies, and pipeline design decisions |
+| [`DECISIONS.md`](DECISIONS.md) | Index rationale, concurrency decisions, and scaling considerations |
 | [`REVIEW.md`](REVIEW.md) | In-depth defect analysis and code review of the starter candidate kit |
 | [`.env.example`](.env.example) | Environment variable template with configuration instructions |
 | [`render.yaml`](render.yaml) | Render Infrastructure-as-Code Blueprint specification (`plan: free`) |
