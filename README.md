@@ -3,8 +3,8 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-6.0%2B-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![CI Tests](https://github.com/ajayreddy510/hrone-attendance-api/actions/workflows/tests.yml/badge.svg)](https://github.com/ajayreddy510/hrone-attendance-api/actions/workflows/tests.yml)
-[![Assignment](https://img.shields.io/badge/HROne-Trainee%20Assignment-purple)](https://github.com/ajayreddy510/hrone-attendance-api)
+[![CI Tests](https://github.com/ajayreddy510/employee-attendance-analytics-api/actions/workflows/tests.yml/badge.svg)](https://github.com/ajayreddy510/employee-attendance-analytics-api/actions/workflows/tests.yml)
+[![Assignment](https://img.shields.io/badge/HROne-Trainee%20Assignment-purple)](https://github.com/ajayreddy510/employee-attendance-analytics-api)
 
 A robust, reviewer-ready Employee Attendance & Analytics REST API engineered with Python 3.11+, FastAPI, and MongoDB 6.0+. Developed for the **HROne Software Engineer Trainee** technical assignment, this service implements strict attendance validation, race-safe attendance punch-in/out operations, Indian Standard Time (IST) overnight shift management, audit-logged attendance regularizations, and database-native aggregation pipelines for departmental and organizational analytics.
 
@@ -18,8 +18,8 @@ A robust, reviewer-ready Employee Attendance & Analytics REST API engineered wit
 | **Interactive Docs (Swagger UI)** | [https://hrone-attendance-api-7vq3.onrender.com/docs](https://hrone-attendance-api-7vq3.onrender.com/docs) | Full interactive OpenAPI test client and schema explorer |
 | **Health Check** | [https://hrone-attendance-api-7vq3.onrender.com/health](https://hrone-attendance-api-7vq3.onrender.com/health) | Readiness probe (returns `{"status":"ok"}` when MongoDB responds to a ping) |
 | **OpenAPI Specification (JSON)** | [https://hrone-attendance-api-7vq3.onrender.com/openapi.json](https://hrone-attendance-api-7vq3.onrender.com/openapi.json) | Raw OpenAPI schema definition |
-| **GitHub Repository** | [ajayreddy510/hrone-attendance-api](https://github.com/ajayreddy510/hrone-attendance-api) | Source code repository and issue tracker |
-| **CI / CD Pipeline** | [GitHub Actions Workflow](https://github.com/ajayreddy510/hrone-attendance-api/actions/workflows/tests.yml) | Continuous integration automated test suite status |
+| **GitHub Repository** | [ajayreddy510/employee-attendance-analytics-api](https://github.com/ajayreddy510/employee-attendance-analytics-api) | Source code repository and issue tracker |
+| **CI / CD Pipeline** | [GitHub Actions Workflow](https://github.com/ajayreddy510/employee-attendance-analytics-api/actions/workflows/tests.yml) | Continuous integration automated test suite status |
 
 ---
 
@@ -27,8 +27,8 @@ A robust, reviewer-ready Employee Attendance & Analytics REST API engineered wit
 
 To explore the architecture, module relationships, and implementation details interactively:
 
-* **[GitDiagram](https://gitdiagram.com/ajayreddy510/hrone-attendance-api)**: Interactive, AI-generated visual overview of repository architecture, components, and connections. *(Note: AI-generated diagrams may simplify complex sub-pipelines and should be checked against repository source files).*
-* **[GitIngest](https://gitingest.com/ajayreddy510/hrone-attendance-api)**: Consolidated text digest of all repository source files formatted for LLM-assisted code exploration, code review, and prompt-driven analysis. *(External development aid; not part of the runtime service).*
+* **[GitDiagram](https://gitdiagram.com/ajayreddy510/employee-attendance-analytics-api)**: Interactive, AI-generated visual overview of repository architecture, components, and connections. *(Note: AI-generated diagrams may simplify complex sub-pipelines and should be checked against repository source files).*
+* **[GitIngest](https://gitingest.com/ajayreddy510/employee-attendance-analytics-api)**: Consolidated text digest of all repository source files formatted for LLM-assisted code exploration, code review, and prompt-driven analysis. *(External development aid; not part of the runtime service).*
 
 ---
 
@@ -131,8 +131,8 @@ Contract endpoints strictly implement the specification defined in [`openapi.yam
 ### 1. Environment Configuration
 Clone the repository and create an isolated virtual environment:
 ```bash
-git clone https://github.com/ajayreddy510/hrone-attendance-api.git
-cd hrone-attendance-api
+git clone https://github.com/ajayreddy510/employee-attendance-analytics-api.git
+cd employee-attendance-analytics-api
 
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
