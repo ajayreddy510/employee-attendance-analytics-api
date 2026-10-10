@@ -98,6 +98,87 @@ def test_invalid_calendar_dates_rejection():
     assert res_trend.status_code == 422
 
 
+def test_strict_joined_on_formats():
+    # Reject basic ISO format without hyphens
+    res1 = client.post("/employees", json={
+        "emp_code": "EMP8001",
+        "name": "ISO Test",
+        "email": "iso1@example.com",
+        "department": "Engineering",
+        "joined_on": "20260101"
+    })
+    assert res1.status_code == 422
+    assert "joined_on" in res1.text
+
+    # Reject week-date format
+    res2 = client.post("/employees", json={
+        "emp_code": "EMP8002",
+        "name": "ISO Test",
+        "email": "iso2@example.com",
+        "department": "Engineering",
+        "joined_on": "2026-W01-1"
+    })
+    assert res2.status_code == 422
+    assert "joined_on" in res2.text
+
+    # Reject year 0000
+    res3 = client.post("/employees", json={
+        "emp_code": "EMP8003",
+        "name": "ISO Test",
+        "email": "iso3@example.com",
+        "department": "Engineering",
+        "joined_on": "0000-01-01"
+    })
+    assert res3.status_code == 422
+    assert "joined_on" in res3.text
+
+    # Reject non-padded month/day
+    res4 = client.post("/employees", json={
+        "emp_code": "EMP8004",
+        "name": "ISO Test",
+        "email": "iso4@example.com",
+        "department": "Engineering",
+        "joined_on": "2026-1-1"
+    })
+    assert res4.status_code == 422
+    assert "joined_on" in res4.text
+
+    # Accept strictly valid YYYY-MM-DD
+    db.employees.delete_many({"emp_code": "EMP8005"})
+    res5 = client.post("/employees", json={
+        "emp_code": "EMP8005",
+        "name": "Valid Date",
+        "email": "valid_iso@example.com",
+        "department": "Engineering",
+        "joined_on": "2026-01-01"
+    })
+    assert res5.status_code == 201
+
+
+def test_invalid_month_format_regression():
+    # Year 0000 should return 422 Unprocessable Entity, not unhandled 500
+    res_dept = client.get("/analytics/departments/summary?month=0000-01")
+    assert res_dept.status_code == 422
+
+    res_emp = client.get("/analytics/employees/EMP1001/monthly?month=0000-01")
+    assert res_emp.status_code == 422
+
+    res_late = client.get("/analytics/leaderboard/late?month=0000-01")
+    assert res_late.status_code == 422
+
+    res_exp = client.get("/admin/explain/department_summary?month=0000-01")
+    assert res_exp.status_code == 422
+
+    # Month 13 should return 422
+    res_m13 = client.get("/analytics/departments/summary?month=2026-13")
+    assert res_m13.status_code == 422
+
+    # Month 00 should return 422
+    res_m00 = client.get("/analytics/departments/summary?month=2026-00")
+    assert res_m00.status_code == 422
+
+
+
 # --------------------------------------------------------------------------- #
 # 2. Half-Up Rounding vs Banker's Rounding (Ties-To-Even)
 # --------------------------------------------------------------------------- #
@@ -298,6 +379,139 @@ def test_rules_calculations():
     # 19:10 (40 min past 18:30) -> 40
     t_ot40 = datetime(2026, 7, 6, 13, 40, 0, tzinfo=timezone.utc)
     assert compute_overtime(t_ot40, "18:30", "09:30", "2026-07-06") == 40
+
+
+def test_microsecond_truncation_to_whole_seconds():
+    emp_code = "EMP_MICRO_1"
+    db.employees.update_one(
+        {"emp_code": emp_code},
+        {"$set": {
+            "emp_code": emp_code,
+            "name": "Microsecond Emp",
+            "email": "micro@example.com",
+            "department": "Engineering",
+            "shift_start": "09:30",
+            "shift_end": "18:30",
+            "joined_on": "2026-01-01",
+            "created_at": datetime(2026, 1, 1, 0, 0, 0, 456789, tzinfo=timezone.utc),
+        }},
+        upsert=True
+    )
+    db.attendance_logs.delete_many({"emp_code": emp_code, "date": "2026-07-20"})
+    db.attendance_logs.insert_one({
+        "emp_code": emp_code,
+        "date": "2026-07-20",
+        "status": "PRESENT",
+        "punch_in": datetime(2026, 7, 20, 4, 0, 0, 850000, tzinfo=timezone.utc),
+        "punch_out": datetime(2026, 7, 20, 13, 0, 0, 123456, tzinfo=timezone.utc),
+        "work_hours": 9.0,
+        "late_minutes": 0,
+        "overtime_minutes": 0,
+        "half_day": False,
+        "history": [
+            {
+                "at": datetime(2026, 7, 20, 14, 0, 0, 999999, tzinfo=timezone.utc),
+                "by": "admin",
+                "reason": "microsecond audit test",
+                "changes": {
+                    "punch_in": {
+                        "from": datetime(2026, 7, 20, 3, 59, 59, 500000, tzinfo=timezone.utc),
+                        "to": datetime(2026, 7, 20, 4, 0, 0, 850000, tzinfo=timezone.utc),
+                    }
+                }
+            }
+        ]
+    })
+
+    # Fetch attendance list
+    res = client.get(f"/attendance?emp_code={emp_code}&date_from=2026-07-20&date_to=2026-07-20")
+    assert res.status_code == 200
+    items = res.json()["items"]
+    assert len(items) == 1
+    doc = items[0]
+
+    # Verify all output epoch milliseconds are exact multiples of 1000 (ending in 000)
+    assert doc["punch_in"] is not None and doc["punch_in"] % 1000 == 0
+    assert doc["punch_out"] is not None and doc["punch_out"] % 1000 == 0
+    hist = doc["history"][0]
+    assert hist["at"] is not None and hist["at"] % 1000 == 0
+    assert hist["changes"]["punch_in"]["from"] % 1000 == 0
+    assert hist["changes"]["punch_in"]["to"] % 1000 == 0
+
+    # Also check employee list created_at truncation
+    emp_res = client.get("/employees?department=Engineering")
+    assert emp_res.status_code == 200
+    emp_match = next((e for e in emp_res.json()["items"] if e["emp_code"] == emp_code), None)
+    assert emp_match is not None
+    assert emp_match["created_at"] % 1000 == 0
+
+
+def test_boundary_conditions_half_day_and_overnight_overtime():
+    # R4 Half-Day Cutoff: 4.50 hours threshold
+    # 4.49 hours = 16164 seconds
+    t_in = datetime(2026, 7, 1, 4, 0, 0, tzinfo=timezone.utc)
+    t_out_449 = datetime(2026, 7, 1, 8, 29, 24, tzinfo=timezone.utc)
+    wh_449 = compute_work_hours(t_in, t_out_449)
+    assert wh_449 == 4.49
+    assert (wh_449 < 4.50) is True  # half_day is True
+
+    # 4.50 hours = 16200 seconds
+    t_out_450 = datetime(2026, 7, 1, 8, 30, 0, tzinfo=timezone.utc)
+    wh_450 = compute_work_hours(t_in, t_out_450)
+    assert wh_450 == 4.50
+    assert (wh_450 < 4.50) is False  # half_day is False
+
+    # Test via API punch-in and punch-out for half_day boundary
+    emp_code = "EMP_HALF_DAY"
+    db.employees.update_one(
+        {"emp_code": emp_code},
+        {"$set": {
+            "emp_code": emp_code,
+            "name": "Half Day Tester",
+            "email": "halfday@example.com",
+            "department": "Engineering",
+            "shift_start": "09:30",
+            "shift_end": "18:30",
+            "joined_on": "2026-01-01",
+            "created_at": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+    # Day 1: 4.49 hours -> half_day True
+    db.attendance_logs.delete_many({"emp_code": emp_code, "date": "2026-07-21"})
+    ts_in = dt_to_epoch(t_in)
+    ts_out_449 = dt_to_epoch(t_out_449)
+    assert client.post("/attendance/punch-in", json={"emp_code": emp_code, "punched_at": ts_in}).status_code == 201
+    res_out_1 = client.post("/attendance/punch-out", json={"emp_code": emp_code, "punched_at": ts_out_449})
+    assert res_out_1.status_code == 200
+    assert res_out_1.json()["half_day"] is True
+    assert res_out_1.json()["work_hours"] == 4.49
+
+    # Day 2: 4.50 hours -> half_day False
+    t_in_d2 = datetime(2026, 7, 22, 4, 0, 0, tzinfo=timezone.utc)
+    t_out_d2 = datetime(2026, 7, 22, 8, 30, 0, tzinfo=timezone.utc)
+    db.attendance_logs.delete_many({"emp_code": emp_code, "date": "2026-07-22"})
+    assert client.post("/attendance/punch-in", json={"emp_code": emp_code, "punched_at": dt_to_epoch(t_in_d2)}).status_code == 201
+    res_out_2 = client.post("/attendance/punch-out", json={"emp_code": emp_code, "punched_at": dt_to_epoch(t_out_d2)})
+    assert res_out_2.status_code == 200
+    assert res_out_2.json()["half_day"] is False
+    assert res_out_2.json()["work_hours"] == 4.50
+
+    # R3 Overnight Overtime: shift 22:00 -> 06:00
+    # Date: 2026-07-23 (shift start 22:00 IST on July 23, ends 06:00 IST on July 24)
+    # 06:00 IST = 00:30 UTC on July 24
+    # 29 min past shift_end: 06:29 IST = 00:59 UTC -> overtime is 0
+    t_ot_29 = datetime(2026, 7, 24, 0, 59, 0, tzinfo=timezone.utc)
+    assert compute_overtime(t_ot_29, "06:00", "22:00", "2026-07-23") == 0
+
+    # 30 min past shift_end: 06:30 IST = 01:00 UTC -> overtime is 30
+    t_ot_30 = datetime(2026, 7, 24, 1, 0, 0, tzinfo=timezone.utc)
+    assert compute_overtime(t_ot_30, "06:00", "22:00", "2026-07-23") == 30
+
+    # 31 min past shift_end: 06:31 IST = 01:01 UTC -> overtime is 31
+    t_ot_31 = datetime(2026, 7, 24, 1, 1, 0, tzinfo=timezone.utc)
+    assert compute_overtime(t_ot_31, "06:00", "22:00", "2026-07-23") == 31
+
 
 
 # --------------------------------------------------------------------------- #

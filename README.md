@@ -19,10 +19,13 @@ Built for the HROne Software Engineer Trainee technical assignment.
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    pip install -r requirements.txt
+
+   # For development and running the test suite:
+   pip install -r requirements-dev.txt
    ```
 
 2. **Configure environment:**
-   Create a `.env` file (or set environment variables):
+   Create a `.env` file (see [`.env.example`](.env.example) for template):
    ```env
    MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
    MONGO_DB=attendance_db
@@ -30,6 +33,7 @@ Built for the HROne Software Engineer Trainee technical assignment.
    *(Local Docker or local MongoDB instance e.g. `mongodb://localhost:27017` also works).*
 
 3. **Seed sample data (optional):**
+   > **Warning:** `sample_seed.py` clears (`delete_many({})`) and replaces the `employees` and `attendance_logs` collections in the configured `MONGO_DB`. Never run this against a production or live evaluation database.
    ```bash
    python sample_seed.py
    ```
@@ -67,10 +71,13 @@ Built for the HROne Software Engineer Trainee technical assignment.
 ## Key Files
 * [`app/main.py`](app/main.py): Complete application implementation.
 * [`tests/test_api.py`](tests/test_api.py): Comprehensive automated test suite.
-* [`requirements.txt`](requirements.txt): Python dependencies.
+* [`requirements.txt`](requirements.txt): Production Python dependencies.
+* [`requirements-dev.txt`](requirements-dev.txt): Development and test dependencies.
+* [`DATA_MODEL.md`](DATA_MODEL.md): Database collection schemas and document structure.
+* [`openapi.yaml`](openapi.yaml): API contract and business rule specifications.
 * [`REVIEW.md`](REVIEW.md): Detailed defect review of the starter codebase.
 * [`DECISIONS.md`](DECISIONS.md): Architectural decisions and indexing rationale.
-* [`openapi.yaml`](openapi.yaml): API contract and business rule specifications.
+* [`.env.example`](.env.example): Environment variable template.
 * [`render.yaml`](render.yaml): Render Blueprint for automated web service deployment.
 
 ---
@@ -81,6 +88,7 @@ Run the automated test suite using an isolated test database:
 ```bash
 python -m pytest tests/test_api.py -v
 ```
+> **Note:** The test suite operates exclusively against an isolated database (`attendance_test_db` via `TEST_MONGO_URI`, defaulting to `mongodb://localhost:27017`). The session fixture cleans up test collections (`employees`, `attendance_logs`) in `attendance_test_db`. Never configure `TEST_MONGO_URI` with production credentials.
 
 ---
 

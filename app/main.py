@@ -95,7 +95,10 @@ def parse_valid_date(date_str: str) -> date:
             detail=f"Invalid date format: {date_str}, expected YYYY-MM-DD",
         )
     try:
-        return date.fromisoformat(date_str)
+        y, m, d = map(int, date_str.split("-"))
+        if y < 1 or y > 9999:
+            raise ValueError("year out of range")
+        return date(y, m, d)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -110,8 +113,17 @@ def parse_valid_month(month_str: str) -> tuple[int, int]:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid month format: {month_str}, expected YYYY-MM",
         )
-    y, m = map(int, month_str.split("-"))
-    return y, m
+    try:
+        y, m = map(int, month_str.split("-"))
+        if y < 1 or y > 9999:
+            raise ValueError("year out of range")
+        date(y, m, 1)
+        return y, m
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid calendar month: {month_str}",
+        )
 
 
 def round_half_up(val: Optional[Union[float, Decimal]], decimals: int = 2) -> Optional[float]:
@@ -123,13 +135,19 @@ def round_half_up(val: Optional[Union[float, Decimal]], decimals: int = 2) -> Op
     return float(d.quantize(target, rounding=ROUND_HALF_UP))
 
 
+EPOCH_START = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
 def dt_to_epoch(dt: Optional[datetime]) -> Optional[int]:
-    """Convert datetime to integer epoch milliseconds."""
+    """Convert datetime to integer epoch milliseconds truncated to whole seconds (R1)."""
     if dt is None:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return int(dt.timestamp() * 1000)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    sec = int((dt - EPOCH_START).total_seconds())
+    return sec * 1000
 
 
 def epoch_to_dt(ms: Optional[int]) -> Optional[datetime]:
@@ -236,12 +254,24 @@ def format_attendance_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
             f_val = v.get("from")
             t_val = v.get("to")
             if k in ("punch_in", "punch_out"):
-                f_val = dt_to_epoch(f_val) if isinstance(f_val, datetime) else f_val
-                t_val = dt_to_epoch(t_val) if isinstance(t_val, datetime) else t_val
+                if isinstance(f_val, datetime):
+                    f_val = dt_to_epoch(f_val)
+                elif isinstance(f_val, int):
+                    f_val = (f_val // 1000) * 1000
+                if isinstance(t_val, datetime):
+                    t_val = dt_to_epoch(t_val)
+                elif isinstance(t_val, int):
+                    t_val = (t_val // 1000) * 1000
             changes_out[k] = {"from": f_val, "to": t_val}
 
         at_val = h.get("at")
-        at_epoch = dt_to_epoch(at_val) if isinstance(at_val, datetime) else at_val
+        if isinstance(at_val, datetime):
+            at_epoch = dt_to_epoch(at_val)
+        elif isinstance(at_val, int):
+            at_epoch = (at_val // 1000) * 1000
+        else:
+            at_epoch = at_val
+
         history_out.append({
             "at": at_epoch,
             "by": h.get("by"),
@@ -267,11 +297,17 @@ def get_month_bounds(month_str: str) -> tuple[str, str]:
     """Return start date and end date strings for a month YYYY-MM."""
     year, month = parse_valid_month(month_str)
     start_date = f"{year:04d}-{month:02d}-01"
-    if month == 12:
-        end_d = date(year + 1, 1, 1) - timedelta(days=1)
-    else:
-        end_d = date(year, month + 1, 1) - timedelta(days=1)
-    return start_date, end_d.isoformat()
+    try:
+        if month == 12:
+            end_d = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_d = date(year, month + 1, 1) - timedelta(days=1)
+        return start_date, end_d.isoformat()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid calendar month bounds: {month_str}",
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -712,8 +748,13 @@ class EmployeeCreate(BaseModel):
     def check_joined_on(cls, v: Any):
         if not isinstance(v, str):
             raise ValueError("joined_on must be a string")
+        if not re.match(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$", v):
+            raise ValueError("joined_on must match exact format YYYY-MM-DD")
         try:
-            date.fromisoformat(v)
+            y, m, d = map(int, v.split("-"))
+            if y < 1 or y > 9999:
+                raise ValueError("year out of range")
+            date(y, m, d)
         except Exception:
             raise ValueError("Invalid calendar date")
         return v
