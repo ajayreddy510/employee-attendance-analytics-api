@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: hrone-attendance-api
+    name: employee-attendance-analytics-api
     plan: free
     runtime: python
     buildCommand: pip install -r requirements.txt

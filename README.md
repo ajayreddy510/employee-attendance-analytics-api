@@ -213,7 +213,7 @@ python -m pytest tests/test_api.py -v
 ## Deployment (Render)
 
 The application is deployed as a Web Service on Render using [`render.yaml`](render.yaml):
-* **Service Name:** `employee-attendance-analytics-api` (Blueprint resource: `hrone-attendance-api`, Service ID: `srv-db4uo6g473hc7397mrmg`)
+* **Service Name:** `employee-attendance-analytics-api` (Blueprint resource: `employee-attendance-analytics-api`, Service ID: `srv-db4uo6g473hc7397mrmg`)
 * **Public URL:** [https://hrone-attendance-api-7vq3.onrender.com/](https://hrone-attendance-api-7vq3.onrender.com/)
 * **Build Command:** `pip install -r requirements.txt`
 * **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
