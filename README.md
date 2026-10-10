@@ -59,7 +59,7 @@ graph TD
 
 ## API Surface
 
-All API endpoints strictly implement the contract defined in [`openapi.yaml`](openapi.yaml) and documented in [`DATA_MODEL.md`](DATA_MODEL.md):
+Contract endpoints strictly implement the specification defined in [`openapi.yaml`](openapi.yaml) and documented in [`DATA_MODEL.md`](DATA_MODEL.md), while `GET /` serves as a convenience redirect excluded from the OpenAPI schema:
 
 | Method | Path | Summary & Parameters | Key Response Behaviors |
 |---|---|---|---|
@@ -96,7 +96,7 @@ All API endpoints strictly implement the contract defined in [`openapi.yaml`](op
 
 ### 4. Overtime & Decimal Work-Hour Rounding (R3, R4, R8)
 * **Overtime Threshold (R3):** Overtime (`overtime_minutes`) is counted only if punch-out is at least 30 whole minutes past `shift_end`; otherwise, it records `0`.
-* **Half-Up Rounding (R4, R8):** Work hours and analytics rates use exact decimal arithmetic with half-up rounding (`ROUND_HALF_UP`), avoiding banker's ties-to-even bias (`ROUND_HALF_EVEN`) and IEEE 754 floating-point drift.
+* **Half-Up Rounding (R4, R8):** Work hours are calculated using Decimal arithmetic and rounded using `ROUND_HALF_UP`. Reported analytics rates also use half-up rounding at the final rounding step, avoiding Python’s ties-to-even behavior.
 
 ### 5. Half-Day & Presence Classification (R5, R6)
 * **Half-Day Classification (R5):** An attendance record is classified as `half_day: True` if total work hours are strictly less than 4.50 hours. A half day counts as 0.5 of a present day.
@@ -112,7 +112,7 @@ All API endpoints strictly implement the contract defined in [`openapi.yaml`](op
 
 ### 8. Analytics Aggregation Pipelines (R7, R9)
 * **Working Days from Join Date (R7):** Monthly analytics compute working days (Mon–Fri) from `joined_on`. Weekend records contribute to late minutes and overtime minutes, but not to standard weekday working day counts.
-* **Zero-Log Headcount Inclusion (R9):** Department summary originates from active employees (`joined_on <= end_of_month`), performs a `$lookup` into attendance logs, and unwinds with `preserveNullAndEmptyArrays: true`. Grouping by department with `{"$addToSet": "$emp_code"}` guarantees employees with zero attendance logs are accurately included in total headcount.
+* **Zero-Log Headcount Inclusion (R9):** Department summary originates from employees whose `joined_on` is on or before the period end (`joined_on <= end_of_month`), performs a `$lookup` into attendance logs, and unwinds with `preserveNullAndEmptyArrays: true`. Grouping by department with `{"$addToSet": "$emp_code"}` guarantees employees with zero attendance logs are accurately included in total headcount.
 * **Continuous Date Series with `$densify`:** Department trends generate complete date ranges inside MongoDB aggregation using `$densify`, maintaining continuous 7-day moving averages even for date ranges with zero attendance logs.
 * **Competition Ranking:** Leaderboards apply standard competition ranking (`1, 2, 2, 4`) via `$setWindowFields` with `$rank`.
 
