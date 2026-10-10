@@ -23,6 +23,7 @@ from app.main import (
     compute_work_hours,
     compute_overtime,
     get_attendance_date,
+    get_month_bounds,
 )
 
 client = TestClient(app)
@@ -176,6 +177,24 @@ def test_invalid_month_format_regression():
     # Month 00 should return 422
     res_m00 = client.get("/analytics/departments/summary?month=2026-00")
     assert res_m00.status_code == 422
+
+
+def test_boundary_month_9999_12():
+    # Direct function bounds calculation: must return 9999-12-01 to 9999-12-31 without ValueError
+    start_d, end_d = get_month_bounds("9999-12")
+    assert start_d == "9999-12-01"
+    assert end_d == "9999-12-31"
+
+    # API endpoints accepting valid boundary month 9999-12
+    res_dept = client.get("/analytics/departments/summary?month=9999-12")
+    assert res_dept.status_code == 200
+
+    res_late = client.get("/analytics/leaderboard/late?month=9999-12")
+    assert res_late.status_code == 200
+
+    res_exp = client.get("/admin/explain/department_summary?month=9999-12")
+    assert res_exp.status_code == 200
+
 
 
 

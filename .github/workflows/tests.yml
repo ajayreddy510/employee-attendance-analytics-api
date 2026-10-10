@@ -2,7 +2,7 @@ name: CI Tests
 
 on:
   push:
-    branches: [main, final-hardening]
+    branches: [main, final-hardening, "fix-*"]
   pull_request:
     branches: [main]
 

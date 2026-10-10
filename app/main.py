@@ -299,7 +299,7 @@ def get_month_bounds(month_str: str) -> tuple[str, str]:
     start_date = f"{year:04d}-{month:02d}-01"
     try:
         if month == 12:
-            end_d = date(year + 1, 1, 1) - timedelta(days=1)
+            end_d = date(year, 12, 31)
         else:
             end_d = date(year, month + 1, 1) - timedelta(days=1)
         return start_date, end_d.isoformat()
